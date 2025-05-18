@@ -70,9 +70,14 @@ try:
 except:
     pass
 
-if args.always_cpu:
-    cpu_state = CPUState.CPU
-
+try:
+    import torch_musa
+    _ = torch_musa.device_count()
+    musa_available = torch_musa.is_available()
+    if musa_available:
+        print("MUSA device detected: {}".format(torch_musa.get_device_name(0)))
+except:
+    musa_available = False
 
 def is_intel_xpu():
     global cpu_state
@@ -80,6 +85,12 @@ def is_intel_xpu():
     if cpu_state == CPUState.GPU:
         if xpu_available:
             return True
+    return False
+
+def is_musa():
+    global musa_available
+    if musa_available:
+        return True
     return False
 
 
@@ -96,6 +107,8 @@ def get_torch_device():
     else:
         if is_intel_xpu():
             return torch.device("xpu", torch.xpu.current_device())
+        elif is_musa():
+            return torch.device('musa', torch_musa.current_device())
         else:
             return torch.device(torch.cuda.current_device())
 
@@ -117,6 +130,11 @@ def get_total_memory(dev=None, torch_total_too=False):
             mem_reserved = stats['reserved_bytes.all.current']
             mem_total_torch = mem_reserved
             mem_total = torch.xpu.get_device_properties(dev).total_memory
+        elif is_musa():
+            stats = torch.musa.memory_stats(dev)
+            mem_reserved = stats['reserved_bytes.all.current']
+            _, mem_total = torch.musa.mem_get_info(dev)
+            mem_total_torch = mem_reserved
         else:
             stats = torch.cuda.memory_stats(dev)
             mem_reserved = stats['reserved_bytes.all.current']
@@ -265,6 +283,12 @@ def get_torch_device_name(device):
             except:
                 allocator_backend = ""
             return "{} {} : {}".format(device, torch.cuda.get_device_name(device), allocator_backend)
+        elif device.type == "musa":
+            try:
+                allocator_backend = torch.musa.get_allocator_backend()
+            except:
+                allocator_backend = ""
+            return "{} {} : {}".format(device, torch.musa.get_device_name(device.index), allocator_backend)
         else:
             return "{}".format(device.type)
     elif is_intel_xpu():
@@ -1024,6 +1048,13 @@ def get_free_memory(dev=None, torch_free_too=False):
             mem_free_torch = mem_reserved - mem_active
             mem_free_xpu = torch.xpu.get_device_properties(dev).total_memory - mem_reserved
             mem_free_total = mem_free_xpu + mem_free_torch
+        elif is_musa():
+            stats = torch.musa.memory_stats(dev)
+            mem_active = stats['active_bytes.all.current']
+            mem_reserved = stats['reserved_bytes.all.current']
+            mem_free_musa, _ = torch.musa.mem_get_info(dev)
+            mem_free_torch = mem_reserved - mem_active
+            mem_free_total = mem_free_musa + mem_free_torch
         else:
             stats = torch.cuda.memory_stats(dev)
             mem_active = stats['active_bytes.all.current']
@@ -1095,7 +1126,10 @@ def should_use_fp16(device=None, model_params=0, prioritize_performance=True, ma
 
     if is_intel_xpu():
         return True
-
+        
+    if is_musa():
+        return True
+        
     if torch.version.hip:
         return True
 
@@ -1152,6 +1186,9 @@ def should_use_bf16(device=None, model_params=0, prioritize_performance=True, ma
         return False
 
     if is_intel_xpu():
+        return True
+
+    if is_musa():
         return True
 
     if device is None:
