@@ -20,7 +20,7 @@ def read_arbitrary_config(directory):
 
 
 def load_torch_file(ckpt, safe_load=False, device=None):
-    if device is None:
+    if device is None or device.type == "musa":
         device = torch.device("cpu")
     if ckpt.lower().endswith(".safetensors"):
         sd = safetensors.torch.load_file(ckpt, device=device.type)

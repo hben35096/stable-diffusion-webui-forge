@@ -19,7 +19,7 @@ def attention(q, k, v, pe):
 
 
 def rope(pos, dim, theta):
-    if pos.device.type == "mps" or pos.device.type == "xpu":
+    if pos.device.type == "mps" or pos.device.type == "xpu" or pos.device.type == "musa":
         scale = torch.arange(0, dim, 2, dtype=torch.float32, device=pos.device) / dim
     else:
         scale = torch.arange(0, dim, 2, dtype=torch.float64, device=pos.device) / dim

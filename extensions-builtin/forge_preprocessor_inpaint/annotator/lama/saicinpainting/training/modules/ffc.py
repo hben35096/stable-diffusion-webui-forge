@@ -83,7 +83,12 @@ class FourierUnit(nn.Module):
         r_size = x.size()
         # (batch, c, h, w/2+1, 2)
         fft_dim = (-3, -2, -1) if self.ffc3d else (-2, -1)
-        ffted = torch.fft.rfftn(x, dim=fft_dim, norm=self.fft_norm)
+        
+        device = x.device
+        if device.type == 'musa':
+            ffted = torch.fft.rfftn(x.cpu(), dim=fft_dim, norm=self.fft_norm).to(device)
+        else:
+            ffted = torch.fft.rfftn(x, dim=fft_dim, norm=self.fft_norm)
         ffted = torch.stack((ffted.real, ffted.imag), dim=-1)
         ffted = ffted.permute(0, 1, 4, 2, 3).contiguous()  # (batch, c, 2, h, w/2+1)
         ffted = ffted.view((batch, -1,) + ffted.size()[3:])
@@ -102,10 +107,17 @@ class FourierUnit(nn.Module):
 
         ffted = ffted.view((batch, -1, 2,) + ffted.size()[2:]).permute(
             0, 1, 3, 4, 2).contiguous()  # (batch,c, t, h, w/2+1, 2)
-        ffted = torch.complex(ffted[..., 0], ffted[..., 1])
 
-        ifft_shape_slice = x.shape[-3:] if self.ffc3d else x.shape[-2:]
-        output = torch.fft.irfftn(ffted, s=ifft_shape_slice, dim=fft_dim, norm=self.fft_norm)
+        if device.type == 'musa':
+            ffted = ffted.to('cpu')
+            ffted = torch.complex(ffted[..., 0], ffted[..., 1])
+            ifft_shape_slice = x.shape[-3:] if self.ffc3d else x.shape[-2:]
+            output = torch.fft.irfftn(ffted, s=ifft_shape_slice, dim=fft_dim, norm=self.fft_norm)
+            output = output.to(device)
+        else:
+            ffted = torch.complex(ffted[..., 0], ffted[..., 1])
+            ifft_shape_slice = x.shape[-3:] if self.ffc3d else x.shape[-2:]
+            output = torch.fft.irfftn(ffted, s=ifft_shape_slice, dim=fft_dim, norm=self.fft_norm)
 
         if self.spatial_scale_factor is not None:
             output = F.interpolate(output, size=orig_size, mode=self.spatial_scale_mode, align_corners=False)
@@ -209,7 +221,7 @@ class SpectralTransform(nn.Module):
             xs = xs.repeat(1, 1, split_no, split_no).contiguous()
         else:
             xs = 0
-
+        
         output = self.conv2(x + output + xs)
 
         return output
