@@ -1244,3 +1244,22 @@ def soft_empty_cache(force=False):
 
 def unload_all_models():
     free_memory(1e30, get_torch_device(), free_all=True)
+
+def dtype_support():
+    device = get_torch_device().type
+    float_dtypes = [
+        torch.float8_e4m3fn, torch.float8_e5m2,
+        torch.float16, torch.bfloat16,torch.float32
+    ]
+    
+    dtype_support_list = []
+    for float_dtype in float_dtypes:
+        try:
+            a = torch.ones((1, 5), dtype=float_dtype, device=device)
+            b = torch.ones((1, 5), dtype=float_dtype, device=device)
+            c = torch.cat([a.view(torch.int8), b.view(torch.int8)], dim=0)
+            c.view(float_dtype)  # Verify that rotation is possible
+            dtype_support_list.append(float_dtype)
+        except Exception:
+            pass
+    return dtype_support_list

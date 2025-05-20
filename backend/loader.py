@@ -29,7 +29,7 @@ possible_models = [StableDiffusion, StableDiffusion2, StableDiffusionXLRefiner, 
 
 logging.getLogger("diffusers").setLevel(logging.ERROR)
 dir_path = os.path.dirname(__file__)
-
+dtype_support_list = memory_management.dtype_support() # Get a list of torch supported data types
 
 def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_path, state_dict):
     config_path = os.path.join(repo_path, component_name)
@@ -86,13 +86,19 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             storage_dtype = memory_management.text_encoder_dtype()
             state_dict_dtype = memory_management.state_dict_dtype(state_dict)
 
-            if state_dict_dtype in [torch.float8_e4m3fn, torch.float8_e5m2, 'nf4', 'fp4', 'gguf']:
-                print(f'Using Detected T5 Data Type: {state_dict_dtype}')
+            if state_dict_dtype in [torch.float8_e4m3fn, torch.float8_e5m2]:
+                if state_dict_dtype not in dtype_support_list:
+                    storage_dtype = dtype_support_list[0]
+                    print(f'Detected that the current PyTorch version does not support the data type {state_dict_dtype} used by the T5 model. Automatically switched to {storage_dtype} for compatibility.') # 调试
+                else:
+                    storage_dtype = state_dict_dtype
+                    print(f'Using Detected T5 Data Type: {storage_dtype}')
+            elif state_dict_dtype in ['nf4', 'fp4', 'gguf']:
                 storage_dtype = state_dict_dtype
-                if state_dict_dtype in ['nf4', 'fp4', 'gguf']:
-                    print(f'Using pre-quant state dict!')
-                    if state_dict_dtype in ['gguf']:
-                        beautiful_print_gguf_state_dict_statics(state_dict)
+                print(f'Using Detected T5 Data Type: {storage_dtype}')
+                print(f'Using pre-quant state dict!')
+                if state_dict_dtype in ['gguf']:
+                    beautiful_print_gguf_state_dict_statics(state_dict)
             else:
                 print(f'Using Default T5 Data Type: {storage_dtype}')
 
@@ -131,13 +137,19 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             if unet_storage_dtype_overwrite is not None:
                 storage_dtype = unet_storage_dtype_overwrite
-            elif state_dict_dtype in [torch.float8_e4m3fn, torch.float8_e5m2, 'nf4', 'fp4', 'gguf']:
-                print(f'Using Detected UNet Type: {state_dict_dtype}')
+            elif state_dict_dtype in [torch.float8_e4m3fn, torch.float8_e5m2]:
+                if state_dict_dtype not in dtype_support_list:
+                    storage_dtype = dtype_support_list[0]
+                    print(f'Detected that the current PyTorch version does not support the data type {state_dict_dtype} used by the Unet model. Automatically switched to {storage_dtype} for compatibility.') # 调试
+                else:
+                    storage_dtype = state_dict_dtype
+                    print(f'Using Detected UNet Type: {storage_dtype}')
+            elif state_dict_dtype in ['nf4', 'fp4', 'gguf']:
                 storage_dtype = state_dict_dtype
-                if state_dict_dtype in ['nf4', 'fp4', 'gguf']:
-                    print(f'Using pre-quant state dict!')
-                    if state_dict_dtype in ['gguf']:
-                        beautiful_print_gguf_state_dict_statics(state_dict)
+                print(f'Using Detected UNet Type: {storage_dtype}')
+                print(f'Using pre-quant state dict!')
+                if state_dict_dtype in ['gguf']:
+                    beautiful_print_gguf_state_dict_statics(state_dict)
 
             load_device = memory_management.get_torch_device()
             computation_dtype = memory_management.get_computation_dtype(load_device, parameters=state_dict_parameters, supported_dtypes=guess.supported_inference_dtypes)
