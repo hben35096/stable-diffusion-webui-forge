@@ -1246,7 +1246,7 @@ def unload_all_models():
     free_memory(1e30, get_torch_device(), free_all=True)
 
 def dtype_support():
-    device = get_torch_device_name(get_torch_device())
+    device = get_torch_device().type
     float_dtypes = [
         torch.float8_e4m3fn, torch.float8_e5m2,
         torch.float16, torch.bfloat16,torch.float32
